@@ -1,78 +1,41 @@
 ﻿using NetCasbin.Abstractions;
-using NetCasbin.Model;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Casbin.Extension.Frontend
 {
-    using Providers;
+    using Models;
 
     public static class Extensions
     {
-        private static readonly string[] _policyKeys = new[] { "r", "p", "g", "e", "m" };
-
         /// <summary>
-        /// 
+        /// Get permission set for the user.
         /// </summary>
-        /// <param name="enforcer"></param>
-        /// <param name="user"></param>
+        /// <example>
+        /// {
+        ///     "read": [ "data1", "data2" ],
+        ///     "write": [ "data1" ]
+        /// }
+        /// </example>
+        /// <param name="enforcer">Application's enforcer</param>
+        /// <param name="user">Name of user from a policy</param>
         /// <returns></returns>
-        public static string CasbinJsGetPermissionForUser(this IEnforcer enforcer, string user)
+        public static ISubjectPermissions CasbinJsGetPermissionForUser(this IEnforcer enforcer, string user)
         {
-            var model = enforcer.GetModel().ToKeyDictionary();
-            var sb = new StringBuilder();
-            sb.AppendLine("[request_definition]")
-              .AppendLine(model["r"])
-              .AppendLine("[policy_definition]")
-              .AppendLine(model["p"]);
-            if (model["g"] != null)
+            var policy = enforcer.GetImplicitPermissionsForUser(user);
+            var permissions = new SubjectPermissions(policy.Count);
+            for (var i = 0; i < policy.Count; i++)
             {
-                sb.AppendLine("[role_definition]")
-                  .AppendLine(model["g"]);
-            }
-            sb.AppendLine("[policy_effect]")
-              .AppendLine(model["e"])
-              .AppendLine("[matchers]")
-              .AppendLine(model["m"]);
+                var obj = policy[i][1];
+                var act = policy[i][2];
 
-            var jb = new JsonBuilder()
-                .WriteOpenObject()
-                .WriteKey("m")
-                .WriteValue(sb.ToString());
-            sb.Clear();
-
-            var policy = enforcer.GetPolicy();
-            jb.WriteKey("p");
-            foreach(var p in policy)
-            {
-                jb.WriteValue(p);
-            }
-
-            jb.WriteCloseObject();
-            return jb.ToString();
-        }
-
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="model"></param>
-        /// <returns></returns>
-        private static IReadOnlyDictionary<string, string> ToKeyDictionary(this Model model)
-        {
-            var dict = model.Model;
-            var result = new Dictionary<string, string>(dict.Keys.Count);
-            foreach (var key in _policyKeys)
-            {
-                string value = null;
-                if (dict.ContainsKey(key) && dict[key].ContainsKey(key))
+                if (!permissions.ContainsKey(act))
                 {
-                    var assertion = dict[key][key];
-                    value = assertion.Value?.Replace("_", ".");
+                    permissions[act] = new SubjectObjects();
                 }
-                result.Add(key, value);
+
+                (permissions[act] as SubjectObjects).Add(obj);
             }
-            return result;
+
+            return permissions;
         }
     }
 }
